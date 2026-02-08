@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Focus Dashboard</title>
+
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: #f6faf7; }
+    .dashboard-container { display: flex; min-height: 100vh; margin-top: 90px; }
+    .sidebar { background: #e6f4ea; width: 220px; padding: 32px 0 0 0; display: flex; flex-direction: column; gap: 8px; border-radius: 0 32px 32px 0; box-shadow: 2px 0 16px rgba(0,0,0,0.04); }
+    .sidebar h2 { text-align: center; color: #2e7d32; margin-bottom: 32px; font-size: 1.6em; font-weight: 800; }
+    .nav { display: flex; flex-direction: column; gap: 4px; margin: 0 0 24px 0; }
+    .nav-btn { background: none; border: none; text-align: left; padding: 12px 32px; font-size: 1.1em; color: #2e7d32; border-radius: 0 24px 24px 0; cursor: pointer; font-weight: 600; transition: background 0.15s; }
+    .nav-btn.active, .nav-btn:hover { background: #c8e6c9; }
+
+    .main { flex: 1; padding: 40px 48px; display: flex; flex-direction: column; gap: 32px; }
+    .cards { display: flex; gap: 24px; flex-wrap: wrap; }
+    .card { background: #fff; border-radius: 18px; padding: 24px 32px; box-shadow: 0 10px 30px rgba(0,0,0,.08); min-width: 220px; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+    .card-title { font-size: 1.1em; color: #388e3c; font-weight: 700; }
+    .card-value { font-size: 2em; font-weight: 800; color: #1b5e20; }
+    .card-tip { font-size: 1em; color: #666; margin-top: 8px; }
+
+    .video-wrap { width: 100%; max-width: 420px; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; border: 2px solid #388e3c; background: #000; }
+    #video-feed { width: 100%; height: 100%; object-fit: cover; display: block; }
+    #video-feed::-webkit-input-placeholder { display: none; }
+    #video-feed::placeholder { display: none; }
+
+    .chart-area { background: #fff; border-radius: 18px; padding: 24px 24px 32px; box-shadow: 0 10px 30px rgba(0,0,0,.08); min-height: 300px; }
+
+    .chart-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+    .chart-tab { padding: 8px 14px; border-radius: 999px; border: 1px solid #c8e6c9; background: #f6faf7; color: #1b5e20; font-weight: 700; cursor: pointer; }
+    .chart-tab.active { background: #e6f4ea; border-color: #8fd1a0; }
+    .chart-wrap { position: relative; width: 100%; height: 220px; }
+    canvas { width: 100%; height: 220px; border-radius: 12px; background:#fff; }
+
+    .chart-tooltip { position: absolute; top: 0; left: 0; transform: translate(-50%, -120%); display: none; pointer-events: none; background: #ffffff; border: 1px solid #e5e7eb; box-shadow: 0 8px 24px rgba(0,0,0,.12); border-radius: 10px; padding: 8px 10px; font-size: 12px; color: #1b5e20; white-space: nowrap; z-index: 10; }
+    .chart-tooltip .label { font-weight: 800; margin-right: 6px; }
+    .chart-tooltip .cat { font-weight: 700; }
+
+    .alert{ position: fixed; top: 0; left: 0; right: 0; z-index: 2000; display: none; align-items: center; justify-content: center; gap: 12px; padding: 12px 16px; background: #FEF3C7; color: #7C2D12; border-bottom: 1px solid #FDE68A; box-shadow: 0 8px 20px rgba(0,0,0,.08); font-weight: 700; }
+    .alert-close{ background: none; border: 0; cursor: pointer; font-size: 22px; line-height: 1; color: inherit; }
+
+    @media (max-width: 900px) {
+      .main { padding: 24px 8px; }
+      .cards { flex-direction: column; gap: 16px; }
+      .sidebar { width: 100px; padding: 16px 0 0 0; }
+      .sidebar h2 { font-size: 1em; }
+    }
+  </style>
+</head>
+<body>
+  <div id="error-log" style="position:fixed;bottom:0;left:0;background:#fff;color:#d32f2f;padding:8px 16px;z-index:99999;font-size:15px;max-width:100vw;"></div>
+  <script>
+    window.onerror = function(msg, url, line, col, error) {
+      document.getElementById('error-log').textContent = `Error: ${msg} at ${url}:${line}:${col}`;
+    };
+  </script>
+
+  <div class="dashboard-container">
+    <aside class="sidebar">
+      <h2>StudySnap</h2>
+      <nav class="nav">
+        <button class="nav-btn active">Home</button>
+        <button class="nav-btn">Graph</button>
+        <button class="nav-btn">Alerts</button>
+        <button class="nav-btn">Tips</button>
+        <button class="nav-btn">Settings</button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <div id="home-section">
+        <div class="cards">
+          <div class="card" style="background:#e6f4ea;">
+            <div class="card-title" style="color:#2e7d32;">Welcome to StudySnap!</div>
+            <div style="font-size:1.1em;color:#388e3c;margin:8px 0 4px 0;">Today's Activity</div>
+            <ul style="margin:0;padding-left:18px;color:#1b5e20;font-size:1em;">
+              <li>Total Focused Time: <span id="today-focused">0 min</span></li>
+              <li>Sessions Completed: <span id="today-sessions">0</span></li>
+              <li>Alerts Triggered: <span id="today-alerts">0</span></li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Webcam Feed</div>
+            <div class="video-wrap">
+              <img id="video-feed" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Focus Score</div>
+            <div class="card-value" id="focus-score">0%</div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Session Time</div>
+            <div class="card-value" id="timer">25:00</div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Current Status</div>
+            <div class="card-value" id="status">-</div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Daily Tip</div>
+            <div class="card-tip" id="daily-tip">Stay focused and take regular breaks!</div>
+          </div>
+
+          <div class="card" id="session-controls-card">
+            <div class="card-title">Session Controls</div>
+            <div style="display:flex;gap:12px;margin-top:8px;">
+              <button id="start-btn" style="background:#10b981;color:#fff;border-radius:8px;padding:10px 18px;font-weight:700;">START</button>
+              <button id="stop-btn" style="background:#f59e0b;color:#fff;border-radius:8px;padding:10px 18px;font-weight:700;">STOP</button>
+              <button id="reset-btn" style="background:#3b82f6;color:#fff;border-radius:8px;padding:10px 18px;font-weight:700;">RESET</button>
+              <!-- Demo button to show a sample session summary (for testing) -->
+              <button id="demo-summary-btn" style="background:#6ee7b7;color:#065f46;border-radius:8px;padding:10px 14px;font-weight:700;">Show Sample Summary</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart area removed from Home and moved to dedicated Graph section -->
+      </div>
+
+      <!-- Graph section (hidden by default) -->
+      <div id="graph-section" style="display:none;">
+        <div class="chart-area">
+          <div class="chart-tabs">
+            <button id="tab-daily" class="chart-tab active">Daily</button>
+            <button id="tab-weekly" class="chart-tab">Weekly</button>
+          </div>
+          <div class="chart-wrap" id="chart-wrap">
+            <canvas id="dailyChart"></canvas>
+            <canvas id="weeklyChart" style="display:none"></canvas>
+            <div id="chart-tooltip" class="chart-tooltip">
+              <span class="label">—</span>
+              <span class="value">—</span>
+              <span class="sep">•</span>
+              <span class="cat">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="alerts-section" style="display:none;">
+        <div class="card">
+          <div class="card-title">Alerts</div>
+          <div id="alerts-list">No alerts yet.</div>
+        </div>
+      </div>
+
+      <div id="tips-section" style="display:none;">
+        <div class="card">
+          <div class="card-title">Tips</div>
+          <div style="margin-top:10px;">
+            <b>Motivation:</b>
+            <ul>
+              <li>Set clear, achievable goals for each session.</li>
+              <li>Reward yourself after completing a task.</li>
+              <li>Visualize your success before you start.</li>
+            </ul>
+            <b>Productivity:</b>
+            <ul>
+              <li>Use the Pomodoro technique: 25 min work, 5 min break.</li>
+              <li>Batch similar tasks together for efficiency.</li>
+              <li>Eliminate distractions before starting your session.</li>
+            </ul>
+            <b>Health:</b>
+            <ul>
+              <li>Take regular breaks to stretch and hydrate.</li>
+              <li>Practice deep breathing to reduce stress.</li>
+              <li>Maintain good posture while working.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="settings-section" style="display:none;">
+        <div class="card">
+          <div class="card-title">Settings</div>
+          <form id="settings-form" style="display:flex;flex-direction:column;gap:18px;margin-top:12px;">
+            <div>
+              <label for="session-duration"><b>Session Duration:</b></label>
+              <select id="session-duration">
+                <option value="1500">25 min</option>
+                <option value="2700">45 min</option>
+                <option value="3600">60 min</option>
+              </select>
+            </div>
+            <div>
+              <label for="focus-sensitivity"><b>Focus Sensitivity:</b></label>
+              <select id="focus-sensitivity">
+                <option value="10">Low</option>
+                <option value="15" selected>Medium</option>
+                <option value="25">High</option>
+              </select>
+            </div>
+            <div>
+              <label for="theme-toggle"><b>Theme:</b></label>
+              <select id="theme-toggle">
+                <option value="light" selected>Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </div>
+            <div>
+              <label for="sound-toggle"><b>Notification Sound:</b></label>
+              <select id="sound-toggle">
+                <option value="on" selected>On</option>
+                <option value="off" >Off</option>
+              </select>
+            </div>
+            <div>
+              <label for="tip-type"><b>Daily Tip Preferences:</b></label>
+              <select id="tip-type">
+                <option value="motivation" selected>Motivation</option>
+                <option value="productivity">Productivity</option>
+                <option value="health">Health</option>
+              </select>
+            </div>
+            <div>
+              <label for="language-select"><b>Language:</b></label>
+              <select id="language-select">
+                <option value="en" selected>English</option>
+                <option value="hi">Hindi</option>
+                <option value="es">Spanish</option>
+              </select>
+            </div>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Session notification chip -->
+  <div id="notify-banner" style="position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:99999;display:none;justify-content:center;align-items:center;min-width:260px;max-width:420px;height:54px;background:#dbeafe;color:#1e3a8a;font-size:1.25em;font-weight:700;box-shadow:0 8px 32px rgba(0,0,0,0.12);border-radius:18px;padding:0 24px;gap:14px;margin-bottom:24px;">
+    <span id="notify-icon" style="font-size:2.2em;margin-right:18px;vertical-align:middle;"></span>
+    <span id="notify-text">Session notification</span>
+    <button id="notify-close" class="alert-close" aria-label="Dismiss notification" style="font-size:2em;margin-left:18px;">×</button>
+  </div>
+
+  <!-- Small top alert banner -->
+  <div id="alert-banner" class="alert" role="alert" aria-live="assertive">
+    <div id="alert-text">You’re not focused. Please try to focus.</div>
+    <button id="alert-close" class="alert-close" aria-label="Dismiss alert">×</button>
+  </div>
+
+  <canvas id="analyzer" width="160" height="90" style="display:none"></canvas>
+
+  <!-- Session Summary Modal -->
+  <div id="session-summary-modal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:10000;">
+    <div style="background:#fff;border-radius:20px;padding:40px;max-width:500px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);animation:slideUp 0.3s ease-out;">
+      <div style="text-align:center;margin-bottom:32px;">
+        <div style="font-size:3em;margin-bottom:16px;">✅</div>
+        <h2 style="margin:0;font-size:2em;color:#1b5e20;font-weight:800;">Session Complete!</h2>
+      </div>
+      
+      <div style="background:#f0f9f7;border-radius:12px;padding:24px;margin-bottom:24px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+          <div class="summary-item">
+            <div style="font-size:0.9em;color:#666;margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Session Time</div>
+            <div style="font-size:1.8em;color:#2e7d32;font-weight:800;" id="summary-session-time">0s</div>
+          </div>
+          
+          <div class="summary-item">
+            <div style="font-size:0.9em;color:#666;margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Total Focused Time</div>
+            <div style="font-size:1.8em;color:#2e7d32;font-weight:800;" id="summary-focused-time">0s</div>
+          </div>
+          
+          <div class="summary-item">
+            <div style="font-size:0.9em;color:#666;margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Average Focus Score</div>
+            <div style="font-size:1.8em;color:#2e7d32;font-weight:800;" id="summary-focus-score">0.00</div>
+          </div>
+          
+          <div class="summary-item">
+            <div style="font-size:0.9em;color:#666;margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Focus Percentage</div>
+            <div style="font-size:1.8em;color:#2e7d32;font-weight:800;" id="summary-focus-percentage">0.0%</div>
+          </div>
+        </div>
+      </div>
+      
+      <div style="background:#e8f5e9;border-left:4px solid #2e7d32;padding:16px;border-radius:4px;margin-bottom:24px;">
+        <div style="color:#1b5e20;font-weight:600;" id="summary-feedback">Great effort! Keep building your focus habits.</div>
+      </div>
+      
+        <div style="display:flex;gap:12px;justify-content:center;">
+        <button id="summary-continue-btn" style="background:#10b981;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-weight:700;cursor:pointer;font-size:1em;transition:background 0.2s;" onclick="summaryContinue()">Continue</button>
+        <button onclick="summaryNewSession()" style="background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:12px 32px;font-weight:700;cursor:pointer;font-size:1em;transition:background 0.2s;">New Session</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+
+  <script>
+    // Global modal functions for immediate availability
+    function closeSummaryModal() {
+      const modal = document.getElementById('session-summary-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+    }
+
+    function showSessionSummary(data) {
+      // Format time helper
+      function formatTime(seconds) {
+        if (seconds >= 60) {
+          return (seconds / 60).toFixed(1) + ' min';
+        }
+        return seconds.toFixed(1) + ' s';
+      }
+      
+      // Get or calculate values
+      const sessionDuration = data.session_duration || data.total_session_time || 0;
+      const focusedTime = data.total_focus_time || 0;
+      const avgFocusScore = data.average_focus_score || 0;
+      const focusPercentage = data.focus_percentage || 0;
+      
+      // Update modal values
+      document.getElementById('summary-session-time').textContent = formatTime(sessionDuration);
+      document.getElementById('summary-focused-time').textContent = formatTime(focusedTime);
+      document.getElementById('summary-focus-score').textContent = (avgFocusScore * 100).toFixed(1) + '%';
+      document.getElementById('summary-focus-percentage').textContent = focusPercentage.toFixed(1) + '%';
+      
+      // Dynamic feedback based on performance
+      let feedback = 'Great effort! Keep building your focus habits.';
+      if (focusPercentage >= 70) {
+        feedback = '⭐ Excellent! You maintained great focus throughout your session!';
+      } else if (focusPercentage >= 50) {
+        feedback = '👍 Good work! You stayed focused for most of the session.';
+      } else if (focusPercentage >= 30) {
+        feedback = '💪 Nice try! Focus takes practice. Keep improving!';
+      } else {
+        feedback = '🏋️ Room for improvement. Remove distractions and try again!';
+      }
+      document.getElementById('summary-feedback').textContent = feedback;
+      
+      // Show modal
+      const modal = document.getElementById('session-summary-modal');
+      if (modal) {
+        modal.style.display = 'flex';
+      }
+    }
+
+    // ===== Notification banner =====
+    const notifyBanner = document.getElementById('notify-banner');
+    const notifyText = document.getElementById('notify-text');
+    const notifyIcon = document.getElementById('notify-icon');
+    const notifyClose = document.getElementById('notify-close');
+    function showNotify(msg) {
+      let icon = '';
+      if (msg.toLowerCase().includes('start')) icon = '🚀';
+      else if (msg.toLowerCase().includes('end')) icon = '✅';
+      else if (msg.toLowerCase().includes('break')) icon = '☕';
+      else icon = '🔔';
+      notifyIcon.textContent = icon;
+      notifyText.textContent = msg;
+      notifyBanner.style.display = 'flex';
+      setTimeout(() => { notifyBanner.style.display = 'none'; }, 4000);
+    }
+    notifyClose.onclick = () => { notifyBanner.style.display = 'none'; };
+
+    // ===== Sidebar navigation =====
+    (function() {
+      const navBtns = document.querySelectorAll('.nav-btn');
+      const homeSection = document.getElementById('home-section');
+      const graphSection = document.getElementById('graph-section');
+      const alertsSection = document.getElementById('alerts-section');
+      const tipsSection = document.getElementById('tips-section');
+      const settingsSection = document.getElementById('settings-section');
+      navBtns.forEach((btn, idx) => {
+        btn.onclick = () => {
+          navBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          // idx mapping: 0=Home, 1=Graph, 2=Alerts, 3=Tips, 4=Settings
+          homeSection.style.display     = idx === 0 ? '' : 'none';
+          graphSection.style.display    = idx === 1 ? '' : 'none';
+          alertsSection.style.display   = idx === 2 ? '' : 'none';
+          tipsSection.style.display     = idx === 3 ? '' : 'none';
+          settingsSection.style.display = idx === 4 ? '' : 'none';
+        };
+      });
+    })();
+
+    // ===== Elements & counters =====
+    let todayFocusedMinutes = 0;
+    let todaySessionCount = 0;
+    let alertsLog = [];
+
+    const scoreEl  = document.getElementById("focus-score");
+    const timerEl  = document.getElementById("timer");
+    const statusEl = document.getElementById("status");
+    const dailyTip = document.getElementById("daily-tip");
+    const todayFocused  = document.getElementById("today-focused");
+    const todaySessions = document.getElementById("today-sessions");
+    const todayAlerts   = document.getElementById("today-alerts");
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn  = document.getElementById('stop-btn');
+    const resetBtn = document.getElementById('reset-btn');
+
+    // ===== EXPOSE CRITICAL STATE TO GLOBAL SCOPE FOR script.js =====
+    window.sessionActive = false;
+    window.alertsSent = 0;
+    window.secondsUnfocusedSinceLastAlert = 0;
+    window.firstAlertArmed = true;
+    console.log('Dashboard: Global state initialized. sessionActive =', window.sessionActive);
+
+    // ===== Timer =====
+    let sessionDuration = 1500; // 25m default
+    let timer = sessionDuration;
+    let timerInterval = null;
+    function updateTimerDisplay() {
+      const min = Math.floor(timer / 60).toString().padStart(2, '0');
+      const sec = (timer % 60).toString().padStart(2, '0');
+      timerEl.textContent = `${min}:${sec}`;
+    }
+    function startTimer() {
+      if (timerInterval) return;
+      timerInterval = setInterval(() => {
+        if (timer > 0) {
+          timer--;
+          updateTimerDisplay();
+        } else {
+          clearInterval(timerInterval);
+          timerInterval = null;
+          showNotify('Break time!');
+        }
+      }, 1000);
+    }
+    function stopTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
+    function resetTimer() { stopTimer(); timer = sessionDuration; updateTimerDisplay(); }
+    updateTimerDisplay();
+
+    // ===== Alert banner helpers =====
+    const alertBanner = document.getElementById('alert-banner');
+    const alertTextEl = document.getElementById('alert-text');
+    const alertClose = document.getElementById('alert-close');
+    let alertTimeout = null;
+    function showAlert(msg) {
+      alertTextEl.textContent = msg;
+      alertBanner.style.display = 'flex';
+      alertBanner.style.visibility = 'visible';
+      alertBanner.style.opacity = '1';
+      console.log('Alert shown:', msg);
+      if (alertTimeout) clearTimeout(alertTimeout);
+      alertTimeout = setTimeout(() => { 
+        alertBanner.style.display = 'none';
+        alertBanner.style.visibility = 'hidden';
+      }, 4000);
+    }
+    alertClose.onclick = () => { alertBanner.style.display = 'none'; if (alertTimeout) clearTimeout(alertTimeout); };
+
+    // ===== Session store (for graphs) =====
+    // each: { dateKey: 'YYYY-MM-DD', start: number(ms), end: number(ms), avg: number(0..1) }
+    const sessions = [];
+    let sessionStartTime = null;
+
+    function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+    function getLast7Dates() { const arr = []; const now = new Date(); for (let i=6;i>=0;i--){ const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()); d.setDate(d.getDate()-i); arr.push(d); } return arr; }
+
+    function recordCompletedSession(avg) {
+      const end = Date.now();
+      const start = sessionStartTime || end;
+      const dk = ymd(new Date(end));
+      sessions.push({ dateKey: dk, start, end, avg: Math.max(0, Math.min(1, avg||0)) });
+    }
+
+    // ===== Charts & tooltip =====
+    const dailyCanvas = document.getElementById('dailyChart');
+    const weeklyCanvas = document.getElementById('weeklyChart');
+    const dctx = dailyCanvas.getContext('2d');
+    const wctx = weeklyCanvas.getContext('2d');
+    const chartWrap = document.getElementById('chart-wrap');
+    const tooltip = document.getElementById('chart-tooltip');
+    const tLabel = tooltip.querySelector('.label');
+    const tValue = tooltip.querySelector('.value');
+    const tCat   = tooltip.querySelector('.cat');
+
+    let dailyBarRects = [];
+    let weeklyBarRects = [];
+    let pinned = null; // {type:'daily'|'weekly', idx:number}
+
+    function classifyScore(v) { if (v < 0.3) return 'Low'; if (v < 0.5) return 'Below Avg'; if (v < 0.8) return 'Average'; return 'High'; }
+    function showChartTooltip(x, y, label, val) {
+      tLabel.textContent = label;
+      tValue.textContent = `${Math.round(val*100)}%`;
+      tCat.textContent = classifyScore(val);
+      tooltip.style.display = 'block';
+      tooltip.style.left = `${x}px`;
+      tooltip.style.top  = `${y}px`;
+    }
+    function hideChartTooltip() { tooltip.style.display = 'none'; }
+
+    function drawDailyBars() {
+      // Today-only, each bar = one completed session avg
+      dailyBarRects = [];
+      const todayKey = ymd(new Date());
+      const todaySessionsList = sessions.filter(s => s.dateKey === todayKey);
+
+      const W = dailyCanvas.width = dailyCanvas.clientWidth;
+      const H = dailyCanvas.height = dailyCanvas.clientHeight;
+      dctx.clearRect(0,0,W,H);
+
+      // frame & grid
+      dctx.strokeStyle = '#c8e6c9';
+      dctx.strokeRect(40,10,W-60,H-40);
+      dctx.fillStyle = '#388e3c';
+      dctx.font = '12px Segoe UI';
+      ['0%','50%','100%'].forEach((label,i)=>{
+        const val = i===0?0:i===1?0.5:1;
+        const y = map(val,0,1,H-40,10);
+        dctx.fillText(label, 6, y+4);
+        dctx.strokeStyle = '#eef8ef';
+        dctx.beginPath(); dctx.moveTo(40,y); dctx.lineTo(W-20,y); dctx.stroke();
+      });
+
+      const n = Math.max(1, todaySessionsList.length);
+      const plotW = W-60;
+      const barW = Math.max(14, (plotW / n) - 12);
+
+      todaySessionsList.forEach((s,idx)=>{
+        const x = 40 + idx*(plotW/n) + ((plotW/n) - barW)/2;
+        const h = (H-50)*s.avg;
+        const y = H-40 - h;
+        dctx.fillStyle = '#c8e6c9';
+        dctx.fillRect(x, y, barW, h);
+        dctx.fillStyle = '#388e3c';
+        const lbl = new Date(s.start).toTimeString().slice(0,5); // HH:MM
+        dctx.fillText(lbl, x + barW/2 - 16, H-20);
+        dailyBarRects.push({x, y, w: barW, h, label: `Session ${idx+1} @ ${lbl}`, val: s.avg});
+      });
+
+      if (todaySessionsList.length === 0) {
+        dctx.fillStyle = '#6b7280';
+        dctx.fillText('No sessions completed today yet', 60, H/2);
+      }
+
+      if (pinned && pinned.type==='daily') {
+        const r = dailyBarRects[pinned.idx];
+        if (r) { dctx.strokeStyle = '#2e7d32'; dctx.lineWidth = 2; dctx.strokeRect(r.x-1, r.y-1, r.w+2, r.h+2); }
+      }
+
+      function map(v,a,b,c,d){ return c + (v-a)*(d-c)/(b-a); }
+    }
+
+    function drawWeeklyBars() {
+      // Last 7 days, each bar = day avg across that day's completed sessions
+      weeklyBarRects = [];
+      const W = weeklyCanvas.width = weeklyCanvas.clientWidth;
+      const H = weeklyCanvas.height = weeklyCanvas.clientHeight;
+      wctx.clearRect(0,0,W,H);
+
+      wctx.strokeStyle = '#c8e6c9';
+      wctx.strokeRect(40,10,W-60,H-40);
+      wctx.fillStyle = '#388e3c';
+      wctx.font = '12px Segoe UI';
+      ['0%','50%','100%'].forEach((label,i)=>{
+        const val = i===0?0:i===1?0.5:1;
+        const y = map(val,0,1,H-40,10);
+        wctx.fillText(label, 6, y+4);
+        wctx.strokeStyle = '#eef8ef';
+        wctx.beginPath(); wctx.moveTo(40,y); wctx.lineTo(W-20,y); wctx.stroke();
+      });
+
+      const dates = getLast7Dates();
+      const avgs = dates.map(d=>{
+        const k = ymd(d);
+        const daySessions = sessions.filter(s => s.dateKey === k);
+        if (daySessions.length === 0) return 0;
+        const sum = daySessions.reduce((a,b)=>a + b.avg, 0);
+        return sum / daySessions.length;
+      });
+
+      const n = 7;
+      const plotW = W-60;
+      const barW = Math.max(10, (plotW / n) - 12);
+      const labels = ['S','M','T','W','T','F','S'];
+      avgs.forEach((v,i)=>{
+        const x = 40 + i*(plotW/n) + ((plotW/n) - barW)/2;
+        const h = (H-50)*v;
+        const y = H-40 - h;
+        wctx.fillStyle = '#c8e6c9';
+        wctx.fillRect(x, y, barW, h);
+        wctx.fillStyle = '#388e3c';
+        wctx.fillText(labels[i], x + barW/2 - 4, H-20);
+        weeklyBarRects.push({x, y, w: barW, h, label: labels[i], val: v});
+      });
+
+      if (pinned && pinned.type==='weekly') {
+        const r = weeklyBarRects[pinned.idx];
+        if (r) { wctx.strokeStyle = '#2e7d32'; wctx.lineWidth = 2; wctx.strokeRect(r.x-1, r.y-1, r.w+2, r.h+2); }
+      }
+
+      function map(v,a,b,c,d){ return c + (v-a)*(d-c)/(b-a); }
+    }
+
+    // Tooltip interactions (hover + click to pin)
+    function handleHover(evt, type) {
+      const canvas = (type==='daily') ? dailyCanvas : weeklyCanvas;
+      const rects = (type==='daily') ? dailyBarRects : weeklyBarRects;
+      const rect = canvas.getBoundingClientRect();
+      const wrapRect = chartWrap.getBoundingClientRect();
+      const x = evt.clientX - rect.left;
+      const y = evt.clientY - rect.top;
+
+      const idx = rects.findIndex(r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+      if (idx === -1) { if (!pinned) hideChartTooltip(); return; }
+      const bar = rects[idx];
+      const tx = rect.left + bar.x + bar.w/2 - wrapRect.left;
+      const ty = rect.top + bar.y - wrapRect.top;
+      showChartTooltip(tx, ty, (type==='daily'? 'Today: ' : 'Week: ')+bar.label, bar.val);
+    }
+    function handleLeave() { if (!pinned) hideChartTooltip(); }
+    function handleClick(evt, type) {
+      const canvas = (type==='daily') ? dailyCanvas : weeklyCanvas;
+      const rects = (type==='daily') ? dailyBarRects : weeklyBarRects;
+      const rect = canvas.getBoundingClientRect();
+      const x = evt.clientX - rect.left;
+      const y = evt.clientY - rect.top;
+      const idx = rects.findIndex(r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+      if (idx === -1) { pinned = null; hideChartTooltip(); }
+      else {
+        pinned = {type, idx};
+        (type==='daily' ? drawDailyBars : drawWeeklyBars)();
+        const wrapRect = chartWrap.getBoundingClientRect();
+        const bar = rects[idx];
+        const tx = rect.left + bar.x + bar.w/2 - wrapRect.left;
+        const ty = rect.top + bar.y - wrapRect.top;
+        showChartTooltip(tx, ty, (type==='daily'? 'Today: ' : 'Week: ')+bar.label, bar.val);
+      }
+    }
+    dailyCanvas.addEventListener('mousemove', e => handleHover(e,'daily'));
+    dailyCanvas.addEventListener('mouseleave', handleLeave);
+    dailyCanvas.addEventListener('click', e => handleClick(e,'daily'));
+    weeklyCanvas.addEventListener('mousemove', e => handleHover(e,'weekly'));
+    weeklyCanvas.addEventListener('mouseleave', handleLeave);
+    weeklyCanvas.addEventListener('click', e => handleClick(e,'weekly'));
+
+    const tabDaily = document.getElementById('tab-daily');
+    const tabWeekly = document.getElementById('tab-weekly');
+    tabDaily.onclick = () => { 
+      tabDaily.classList.add('active'); 
+      tabWeekly.classList.remove('active'); 
+      dailyCanvas.style.display='block'; 
+      weeklyCanvas.style.display='none'; 
+      pinned = null; 
+      hideChartTooltip(); 
+      setTimeout(() => { drawDailyBars(); }, 50);
+    };
+    tabWeekly.onclick = () => { 
+      tabWeekly.classList.add('active'); 
+      tabDaily.classList.remove('active'); 
+      dailyCanvas.style.display='none'; 
+      weeklyCanvas.style.display='block'; 
+      pinned = null; 
+      hideChartTooltip(); 
+      setTimeout(() => { drawWeeklyBars(); }, 50);
+    };
+
+    // ===== Focus/Alert ENGINE =====
+    let pollInterval = null;
+    let unfocusedAlertCount = 0;
+
+    const FOCUS_OK = 0.8;
+    const FOCUS_UNFOCUSED = 0.5;
+    const UNFOCUS_ALERT_WINDOW_SEC = 30;   // gap between alerts 2→3→4
+    const MAX_UNFOCUS_ALERTS = 3;          // close on 4th alert
+
+    // State - now using window object for script.js access
+    // window.alertsSent = 0;  (already initialized above)
+    // window.secondsUnfocusedSinceLastAlert = 0;  (already initialized)
+    // window.firstAlertArmed = true;  (already initialized)
+
+    function logAlert(label='Unfocus alert') {
+      const stamp = new Date().toLocaleTimeString();
+      alertsLog.push(`${label} @ ${stamp}`);
+      const alertsList = document.getElementById('alerts-list');
+      if (alertsList) {
+        alertsList.innerHTML = '<ul>' + alertsLog.map(a => `<li>${a}</li>`).join('') + '</ul>';
+      }
+    }
+
+    function triggerUnfocusAlert() {
+      showAlert(`⚠️ You’re not focused. Please try to focus.`);
+      unfocusedAlertCount += 1;
+      todayAlerts.textContent = unfocusedAlertCount;
+
+      window.alertsSent += 1;
+      logAlert(`Unfocus alert (${window.alertsSent}/${MAX_UNFOCUS_ALERTS})`);
+
+      window.firstAlertArmed = false;
+      window.secondsUnfocusedSinceLastAlert = 0;
+
+      if (window.alertsSent >= MAX_UNFOCUS_ALERTS) {
+        closeApplication();
+      }
+    }
+
+    function endSessionAuto(reason = 'Session ended!') {
+      return fetch('/stop_session')
+        .then(r => r.json())
+        .then(data => {
+          showNotify(reason);
+          stopTimer();
+          clearInterval(pollInterval);
+          window.sessionActive = false;
+
+          // Update score display
+          scoreEl.textContent = Math.round((data.average_focus_score || 0) * 100) + "%";
+          statusEl.textContent = "Session Ended";
+          statusEl.style.color = "";
+          alertBanner.style.display = 'none';
+
+          // Record the finished session for graphs
+          recordCompletedSession(data.average_focus_score || 0);
+          todaySessionCount++;
+          todaySessions.textContent = todaySessionCount;
+
+          // Refresh graphs to include the new completed session
+          if (dailyCanvas.style.display !== 'none') drawDailyBars(); else drawWeeklyBars();
+
+          // Reset alert engine for next session
+          window.alertsSent = 0;
+          window.secondsUnfocusedSinceLastAlert = 0;
+          window.firstAlertArmed = true;
+          
+          // Show session summary modal
+          showSessionSummary(data);
+        })
+        .catch(()=>{ /* ignore */ });
+    }
+
+    function closeApplication() {
+      endSessionAuto("Session ended due to prolonged distraction (4 alerts).").finally(()=>{
+        try { window.close(); } catch(e) {}
+        document.body.innerHTML =
+          `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f6faf7;">
+            <div style="background:#fff;border-radius:16px;padding:28px 32px;box-shadow:0 20px 60px rgba(0,0,0,.08);text-align:center;">
+              <div style="font-size:1.4em;font-weight:800;color:#1b5e20;margin-bottom:8px;">Application Closed</div>
+              <div style="color:#444;margin-bottom:18px;">Closed after 4 unfocus alerts.</div>
+              <button onclick="location.reload()" style="background:#10b981;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;">Reopen</button>
+            </div>
+          </div>`;
+      });
+    }
+
+    function pollFocusScore() {
+      fetch('/get_focus_score')
+        .then(r => r.json())
+        .then(data => {
+          const score = data.focus_score || 0;
+          scoreEl.textContent = Math.round(score * 100) + "%";
+
+          const isUnfocused = (score === 0 || score < FOCUS_UNFOCUSED);
+
+          // Status + focused time
+          if (score === 0) {
+            statusEl.textContent = "Camera Issue / Not Focused";
+            statusEl.style.color = "#e74c3c";
+          } else if (window.sessionActive && score >= FOCUS_OK) {
+            statusEl.textContent = "Focused";
+            statusEl.style.color = "#2e7d32";
+            alertBanner.style.display = 'none';
+            window.secondsUnfocusedSinceLastAlert = 0;
+            todayFocusedMinutes += 1/60;
+            todayFocused.textContent = Math.floor(todayFocusedMinutes) + " min";
+          } else if (window.sessionActive && isUnfocused) {
+            statusEl.textContent = "Not Focused";
+            statusEl.style.color = "#e74c3c";
+          } else {
+            statusEl.textContent = "—";
+            statusEl.style.color = "";
+            window.secondsUnfocusedSinceLastAlert = 0;
+          }
+
+          // Redraw current tab
+          if (dailyCanvas.style.display !== 'none') drawDailyBars(); else drawWeeklyBars();
+
+          // ALERT CADENCE
+          if (!window.sessionActive || window.alertsSent >= MAX_UNFOCUS_ALERTS) return;
+
+          if (isUnfocused) {
+            if (window.firstAlertArmed && window.alertsSent === 0) {
+              triggerUnfocusAlert();
+              return;
+            }
+            window.secondsUnfocusedSinceLastAlert += 1; // 1s per poll
+            if (window.secondsUnfocusedSinceLastAlert >= UNFOCUS_ALERT_WINDOW_SEC) {
+              triggerUnfocusAlert();
+              return;
+            }
+          } else {
+            window.secondsUnfocusedSinceLastAlert = 0;
+          }
+
+          // tip
+          dailyTip && updateDailyTip(score);
+        })
+        .catch(() => {
+          scoreEl.textContent = "-";
+          statusEl.textContent = "-";
+          statusEl.style.color = "";
+        });
+    }
+
+    // Session Controls are now handled by script.js via setupDashboardPage()
+    // Removed inline button handlers to prevent conflicts with script.js listeners
+
+    // Settings
+    document.getElementById('session-duration').onchange = function() {
+      sessionDuration = parseInt(this.value);
+      timer = sessionDuration; updateTimerDisplay();
+    };
+
+    // Tips
+    function updateDailyTip(score) {
+      const tipType = document.getElementById('tip-type')?.value || 'motivation';
+      let tip = "";
+      if (tipType === 'motivation') {
+        if (score >= 0.8) tip = "Great job! Keep up your focus and remember to take short breaks.";
+        else if (score >= 0.5) tip = "Good effort! Stay motivated and keep pushing!";
+        else if (score >= 0.3) tip = "Stay motivated! Remove distractions and set clear goals for your session.";
+        else tip = "Struggling to focus? Try changing your environment or take a short walk.";
+      } else if (tipType === 'productivity') {
+        if (score >= 0.8) tip = "Excellent productivity! Try batching similar tasks for efficiency.";
+        else if (score >= 0.5) tip = "Try the Pomodoro technique for even better results.";
+        else if (score >= 0.3) tip = "Break your work into smaller chunks to stay productive.";
+        else tip = "Take a short break and plan your next steps.";
+      } else if (tipType === 'health') {
+        if (score >= 0.8) tip = "Great focus! Remember to stretch and hydrate regularly.";
+        else if (score >= 0.5) tip = "Take a deep breath and relax your eyes for a minute.";
+        else if (score >= 0.3) tip = "Stand up and move around to refresh your mind.";
+        else tip = "Go for a short walk to boost your energy.";
+      }
+      dailyTip.textContent = tip;
+    }
+
+    // initial draws
+    drawDailyBars(); drawWeeklyBars();
+
+    // Expose pollFocusScore to global scope so script.js can call it
+    window.pollFocusScore = pollFocusScore;
+  </script>
+
+  <!-- Load external script -->
+  <script src="script.js" defer></script>
+</body>
+</html>
